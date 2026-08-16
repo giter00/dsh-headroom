@@ -130,25 +130,24 @@ flowchart LR
 
 ### 一键安装（推荐）
 
-使用 dsh 自带的插件管理命令，`<path>` 用本仓库实际路径替换：
+直接从 GitHub 仓库安装（Windows / macOS / Linux 通用）：
 
 ```bash
-# Windows PowerShell / CMD / Git Bash
-dsh plugin --profile web add link:F:/path/to/dsh-headroom
-
-# macOS / Linux
-dsh plugin --profile web add link:/path/to/dsh-headroom
+dsh plugin --profile web add github:giter00/dsh-headroom
 ```
 
-如果 `dsh` 不在 PATH 上，可先定位 profile 内的 CLI：
+如果 `dsh` 不在 PATH 上，可先定位 profile 内的 CLI 再执行同一命令：
 
 ```bash
 # Windows PowerShell
-node "$env:USERPROFILE\.dsh\profiles\node_modules\@deepseek-ai\dsh\lib\bin.js" plugin --profile web add link:F:/path/to/dsh-headroom
+node "$env:USERPROFILE\.dsh\profiles\node_modules\@deepseek-ai\dsh\lib\bin.js" plugin --profile web add github:giter00/dsh-headroom
 
 # macOS / Linux
-node "$HOME/.dsh/profiles/node_modules/@deepseek-ai/dsh/lib/bin.js" plugin --profile web add link:/path/to/dsh-headroom
+node "$HOME/.dsh/profiles/node_modules/@deepseek-ai/dsh/lib/bin.js" plugin --profile web add github:giter00/dsh-headroom
 ```
+
+> pnpm 会在安装时拉取 GitHub 仓库的默认分支（`main`），并自动把
+> `dsh-headroom` 追加到 profile 的 bundle 列表。
 
 ### 手动安装
 
@@ -157,7 +156,7 @@ node "$HOME/.dsh/profiles/node_modules/@deepseek-ai/dsh/lib/bin.js" plugin --pro
 ```jsonc
 {
   "dependencies": {
-    "dsh-headroom": "link:../dsh-headroom"
+    "dsh-headroom": "github:giter00/dsh-headroom"
   },
   "dsh": {
     "profile": {

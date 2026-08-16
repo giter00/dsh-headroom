@@ -3,6 +3,14 @@
   "description": "Headroom-inspired automatic context compression plugin for DeepSeek Harness (dsh): compresses tool outputs before they reach the model and keeps every lossy compression reversible via CCR retrieval tools.",
   "version": "0.1.0",
   "private": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/giter00/dsh-headroom.git"
+  },
+  "homepage": "https://github.com/giter00/dsh-headroom#readme",
+  "bugs": {
+    "url": "https://github.com/giter00/dsh-headroom/issues"
+  },
   "type": "module",
   "engines": {
     "node": ">=22.0.0"

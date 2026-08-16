@@ -128,25 +128,24 @@ compressed and retrievable, and excluded/own/code/error/short outputs are untouc
 
 ### Recommended
 
-Use the dsh plugin manager:
+Install directly from GitHub (same command on Windows / macOS / Linux):
 
 ```bash
-# Windows PowerShell / CMD / Git Bash
-dsh plugin --profile web add link:F:/path/to/dsh-headroom
-
-# macOS / Linux
-dsh plugin --profile web add link:/path/to/dsh-headroom
+dsh plugin --profile web add github:giter00/dsh-headroom
 ```
 
-If `dsh` is not on PATH, invoke the profile CLI directly:
+If `dsh` is not on PATH, invoke the profile CLI directly with the same argument:
 
 ```bash
 # Windows PowerShell
-node "$env:USERPROFILE\.dsh\profiles\node_modules\@deepseek-ai\dsh\lib\bin.js" plugin --profile web add link:F:/path/to/dsh-headroom
+node "$env:USERPROFILE\.dsh\profiles\node_modules\@deepseek-ai\dsh\lib\bin.js" plugin --profile web add github:giter00/dsh-headroom
 
 # macOS / Linux
-node "$HOME/.dsh/profiles/node_modules/@deepseek-ai/dsh/lib/bin.js" plugin --profile web add link:/path/to/dsh-headroom
+node "$HOME/.dsh/profiles/node_modules/@deepseek-ai/dsh/lib/bin.js" plugin --profile web add github:giter00/dsh-headroom
 ```
+
+> pnpm pulls the repository's default branch (`main`) and reconciles the
+> `dsh-headroom` bundle into the profile automatically.
 
 ### Manual
 
@@ -155,7 +154,7 @@ Edit `<DSH_HOME>/profiles/web/package.json`:
 ```jsonc
 {
   "dependencies": {
-    "dsh-headroom": "link:../dsh-headroom"
+    "dsh-headroom": "github:giter00/dsh-headroom"
   },
   "dsh": {
     "profile": {
