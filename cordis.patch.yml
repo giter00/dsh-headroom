@@ -1,0 +1,4 @@
+# dsh bundle patch: inserts dsh-headroom into a profile's layer stack.
+- insert:
+    - id: dsh-headroom
+      name: dsh-headroom

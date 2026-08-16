@@ -1,0 +1,30 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: ['22']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Syntax-check plugin entry
+        run: node --check lib/index.js
+      - name: Syntax-check compressors
+        run: node --check lib/compress.js
+      - name: Syntax-check CCR store
+        run: node --check lib/ccr.js
+      - name: Unit tests
+        run: node tests/compress.test.js
+      - name: Compression / reversibility verification
+        run: node scripts/verify-compress.mjs

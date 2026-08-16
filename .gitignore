@@ -1,0 +1,6 @@
+node_modules/
+.npm-cache/
+*.tgz
+*.tmp
+*.log
+.DS_Store

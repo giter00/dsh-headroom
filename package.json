@@ -1,0 +1,57 @@
+{
+  "name": "dsh-headroom",
+  "description": "Headroom-inspired automatic context compression plugin for DeepSeek Harness (dsh): compresses tool outputs before they reach the model and keeps every lossy compression reversible via CCR retrieval tools.",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "packageManager": "pnpm@11.7.0",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./compress": "./lib/compress.js",
+    "./ccr": "./lib/ccr.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "scripts",
+    "dsh.plugin.json",
+    "cordis.patch.yml",
+    "README.md",
+    "README.en.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "check": "node --check lib/index.js && node --check lib/compress.js && node --check lib/ccr.js",
+    "test": "node tests/compress.test.js",
+    "verify": "node scripts/verify-compress.mjs",
+    "verify:apply": "node scripts/verify-apply.mjs"
+  },
+  "keywords": [
+    "deepseek",
+    "deepseek-harness",
+    "dsh",
+    "context-compression",
+    "headroom",
+    "llm",
+    "agent"
+  ],
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.1-rc.4",
+    "@deepseek-ai/dsh-agent": ">=0.0.1-rc.5",
+    "@deepseek-ai/dsh-llm": ">=0.0.1-rc.5",
+    "@deepseek-ai/dsh-session": ">=0.0.1-rc.5",
+    "@deepseek-ai/dsh-tools": ">=0.0.1-rc.5"
+  },
+  "devDependencies": {},
+  "license": "MIT"
+}
