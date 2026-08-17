@@ -1,6 +1,6 @@
 {
   "id": "dsh-headroom",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "main": "./lib/index.js",
   "description": "Headroom-inspired automatic context compression: compresses tool outputs before they reach the model and registers headroom_retrieve / headroom_compress / headroom_stats tools for reversible retrieval.",
   "engines": {

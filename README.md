@@ -31,8 +31,18 @@
   | grep/ripgrep 结果 | 按文件折叠：`file (N matches)` + `line[:col]: rest` |
   | 构建/测试/日志 | 连续重复行折叠 + 保留 `error/fail/exception/assert` 上下文 |
   | CSV/TSV/markdown 表格 | 保留表头与首尾行，中间行 offload |
-  | 长文本 | 首尾截断 + CCR marker（原文可精确取回） |
+  | 长文本 | **Kompress 风格 ML 压缩**（默认）：逐词打分 + must-keep 保护 + CCR 可逆取回；`textStrategy: 'head-tail'` 可切回首尾截断 |
   | 代码 | **默认不压缩**（JS 端口不做 AST 压缩，避免破坏可补丁字节） |
+
+> **Kompress 文本压缩**（参考 [Headroom](https://github.com/headroomlabs-ai/headroom) 的
+> [Kompress-v2-base](https://huggingface.co/chopratejas/kompress-v2-base) ML 模型）：
+> 文本按词切分 → 每词打分（`score = keep概率 × (0.5 + 0.5 × span分数)`，模拟模型的
+> token 分类头 + span CNN 双头）→ `score > 0.5` 保留（或 `targetRatio` 取 top-k）→
+> 数字 / hex / 全大写标识符 / 路径 / 扩展名 / CLI flag / CamelCase 等**语义脆弱词强制保留**
+> → 保留词重组。默认评分器是确定性纯 JS 启发式；如需接入真实
+> Kompress-v2-base 模型，可**库级注入**自定义 scorer
+> （`compressKompressText(text, { scorer })` / `createKompressCompressor({ scorer })`），
+> 管线完全一致（插件配置暂不暴露 `scorer` 项）。
 
 - **可逆压缩（CCR）**：所有有损压缩都保存原文，`headroom_retrieve` 按 id 精确取回；
   `headroom_stats` 查看节省量；`headroom_compress` 压缩任意文本。
@@ -56,9 +66,10 @@ flowchart LR
   D --> F[search] --> F1[按文件折叠]
   D --> G[log] --> G1[重复折叠 + 错误保留]
   D --> H[tabular] --> H1[首尾行保留]
-  D --> I[text] --> I1[首尾截断]
+  D --> I[text] --> I1[Kompress 逐词打分 + must-keep 保护]
+  I1 -. 无收益 .-> I2[回退首尾截断]
   D --> J[code] --> Z
-  E1 & F1 & G1 & H1 & I1 --> K{压缩后 + marker 更小?}
+  E1 & F1 & G1 & H1 & I1 & I2 --> K{压缩后 + marker 更小?}
   K -- 否 --> Z
   K -- 是 --> L[写入 CCR store]
   L --> M[替换 decision.content]
@@ -66,6 +77,8 @@ flowchart LR
 ```
 
 - `lib/compress.js`：纯函数压缩器，无 `node:*` 依赖，可独立测试。
+- `lib/kompress.js`：Kompress 风格文本压缩管线（word 级评分 + must-keep 保护），
+  参考 Headroom 的 Kompress-v2-base ML 模型；评分器可插拔（默认纯 JS 启发式）。
 - `lib/ccr.js`：CCR store，内存 Map + 去抖持久化到 `<DSH_HOME>/storages/`。
 - `lib/index.js`：dsh 插件入口，注册 `tools/post-execute` 监听器与三个工具。
 - `dsh.plugin.json` + `cordis.patch.yml`：dsh 插件/bundle 清单与补丁。
@@ -83,11 +96,14 @@ flowchart LR
 | 日志 180 行 | log | 3 909 | 1 125 | **71.2%** |
 | CSV 201 行 | tabular | 19 814 | 3 029 | **84.7%** |
 | 长文本 400 段 | text | 29 506 | 546 | **98.1%** |
+| Kompress 长文本（事实+重复词） | text | 16 439 | 2 029 | **87.7%** |
 | 代码 | code | 493 | 493 | 0%（故意不压） |
 | 短文本 | text | 19 | 19 | 0%（未达阈值） |
 
 > token 估算：脚本按 `chars / 4` 粗估，实际 token 与模型 tokenizer 相关。
 > 所有有损压缩均保存原文，`headroom_retrieve` 可精确取回。
+> Kompress 样本：关键事实（`HTTP`/`500`/hex/路径/`IndexError`）全部保留，
+> 重复的 `boilerplatephrase` 被删除且可从 CCR 恢复。
 
 ### 默认配置
 
@@ -108,7 +124,9 @@ flowchart LR
 1. 结构化输出中的关键事实（JSON 键/计数、文件分组、`ERROR/WARN` 行）在压缩后仍可见；
 2. 代码、短文本、错误输出保持字节不变；
 3. 每个有损压缩的原文都能通过 `headroom_retrieve` **逐字节取回**；
-4. 长文本中间被省略的 `NEEDLE-42` 事实，压缩视图不可见，但 CCR 能精确恢复。
+4. 长文本中间被省略的 `NEEDLE-42` 事实，压缩视图不可见，但 CCR 能精确恢复；
+5. Kompress 压缩后 `HTTP`/`500`/`0x1f4d2a8b`/`/var/log/app.log`/`IndexError` 等
+   语义脆弱事实仍可见，重复的 `boilerplatephrase` 被删除且可经 CCR 恢复。
 
 `node scripts/verify-apply.mjs`（需要能解析 `@deepseek-ai/dsh-tools`）进一步验证：
 
@@ -201,6 +219,15 @@ dsh plugin --profile web remove dsh-headroom
     maxTabularLines: 80
     excludeTools: []
     includeErrors: false
+    textStrategy: auto        # auto | kompress | head-tail
+    kompress:
+      enabled: true
+      minWords: 10
+      chunkWords: 350
+      scoreThreshold: 0.5
+      targetRatio: null       # null=阈值决策；0.3=强制保留 30% 最高分词
+      mustKeep: true
+      maxWordChars: 64
     ccr:
       enabled: true
       persist: true
@@ -216,10 +243,18 @@ dsh plugin --profile web remove dsh-headroom
 | `maxCellChars` | `200` | JSON/search 单元格字符串截断长度 |
 | `maxSearchMatchesPerFile` | `60` | 每个文件保留的搜索命中数 |
 | `maxLogLines` | `80` | 日志保留的首尾行数 |
-| `maxTextChars` | `2400` | 长文本首尾保留字符数 |
+| `maxTextChars` | `2400` | 长文本首尾保留字符数（head-tail 策略） |
 | `maxTabularLines` | `80` | 表格保留的首尾行数 |
 | `excludeTools` | `[]` | `*` 通配符；命中的工具不压缩 |
 | `includeErrors` | `false` | 是否压缩工具错误输出 |
+| `textStrategy` | `'auto'` | 长文本策略：`auto`=Kompress 优先、无收益回退 head-tail；`kompress`=仅 Kompress；`head-tail`=仅首尾截断 |
+| `kompress.enabled` | `true` | `false` 时文本走 head-tail |
+| `kompress.minWords` | `10` | 少于该词数的文本跳过（与 Headroom 一致） |
+| `kompress.chunkWords` | `350` | 每块词数（Kompress-v2-base 训练口径，与模型耦合） |
+| `kompress.scoreThreshold` | `0.5` | 保留阈值：`score > 阈值` 才保留（与 Headroom 默认一致） |
+| `kompress.targetRatio` | `null` | 强制保留比例（按分数取 top-k）；`null` 用阈值决策 |
+| `kompress.mustKeep` | `true` | 语义脆弱词（数字/hex/全大写/路径/扩展名/flag/CamelCase）强制保留 |
+| `kompress.maxWordChars` | `64` | 超过该长度的词（如无空格中文长串）细分后评分 |
 | `ccr.enabled` | `true` | 关闭后不进行有损压缩 |
 | `ccr.persist` | `true` | 是否持久化 CCR store |
 | `ccr.ttlMs` | `86400000` | 原始内容保留时长（毫秒） |
@@ -246,6 +281,7 @@ dsh-headroom/
 ├── lib/
 │   ├── index.js          # dsh 插件入口：post-execute 钩子 + 3 个工具
 │   ├── compress.js       # 内容路由与确定性压缩器（纯 JS，无 node:* 依赖）
+│   ├── kompress.js       # Kompress 风格文本压缩管线（词级评分 + must-keep 保护）
 │   └── ccr.js            # CCR store：内存 + 去抖持久化
 ├── scripts/
 │   ├── verify-compress.mjs   # 压缩效果 / 信息保留 / CCR 可逆验证
@@ -277,6 +313,18 @@ node scripts/verify-compress.mjs
 node scripts/verify-apply.mjs
 ```
 
+## 已知限制
+
+- **默认评分器是启发式模拟，不是真实模型推理**：`lib/kompress.js` 忠实移植了
+  Headroom Kompress-v2-base 的管线结构与评分公式，但默认打分来自确定性纯 JS 启发式；
+  需要真实模型语义打分时，可库级注入 ONNX/PyTorch scorer。
+- **Kompress 输出是保留词碎片**：为追求高压缩率，默认阈值会删除大量普通词，输出可读性
+  有限，适合给模型看要点；精确原文始终可通过 `headroom_retrieve` 逐字节取回。
+- **保守不压缩场景**：全部由 must-keep 类词组成的文本、纯重复中文文本会直接走
+  head/tail 回退或原样返回，防止把内容删光。
+- **模板文本不去重**：高频重复的数字/标识符会逐个保留（must-keep 语义），模板化输出
+  可能保留较多重复事实 token，压缩率低于普通散文。
+
 ## 与 Headroom 的差异
 
 | 维度 | Headroom | dsh-headroom |
@@ -284,9 +332,9 @@ node scripts/verify-apply.mjs
 | 集成方式 | proxy / wrap / MCP / SDK | dsh 原生插件，直接挂 `tools/post-execute` |
 | JSON | SmartCrusher（Rust core） | JS 透视压缩（`_keys`/`_rows`/`_common`） |
 | 代码 | AST CodeCompressor | 默认跳过（保证可补丁字节安全） |
-| 文本 | Kompress-v2-base ML 模型 | 首尾截断 + CCR 可逆取回 |
+| 文本 | Kompress-v2-base ML 模型（ONNX/PyTorch） | **同款 Kompress 管线**（词级评分 + must-keep + 阈值/top-k）；默认纯 JS 启发式 scorer，可通过 `createKompressCompressor({ scorer })` 库级注入真实模型后端（插件配置暂不暴露） |
 | 可逆性 | CCR | 本地 CCR store + `headroom_retrieve` |
-| 原生依赖 | 部分 extra 需要 | 无 |
+| 原生依赖 | 部分 extra 需要（onnxruntime/torch） | 无（默认启发式）；接入真实模型时才需要外部依赖 |
 
 ## License
 

@@ -9,6 +9,8 @@
  */
 
 import assert from 'node:assert/strict'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { createCcrStore } from '../lib/ccr.js'
 import {
   compressTextBlock,
@@ -82,6 +84,29 @@ function makeProseOutput() {
   return parts.join(' ')
 }
 
+function makeKompressProseOutput() {
+  // Kompress-style target: long prose with fragile facts (numbers, hex, paths,
+  // ALLCAPS, CamelCase) that must survive word-level deletion, plus a heavily
+  // repeated boilerplate phrase that must be deleted (and recoverable via CCR).
+  const facts = [
+    'HTTP the gateway rejected the request with status 500',
+    'connection refused at 0x1f4d2a8b while reading /var/log/app.log',
+    'IndexError raised in renderer and fallback to legacy path'
+  ]
+  const filler = [
+    'the system processed the event and recorded the outcome',
+    'context compression removes tokens that do not change the answer',
+    'a reversible store keeps the exact original bytes available'
+  ]
+  const parts = []
+  for (let index = 0; index < 120; index += 1) {
+    parts.push(facts[index % facts.length])
+    parts.push(filler[index % filler.length])
+    parts.push('boilerplatephrase')
+  }
+  return parts.join(' ')
+}
+
 function makeCodeOutput() {
   return `export function makeReducer(initialState: State): Reducer<State, Action> {
   const cache = new Map<string, unknown>()
@@ -104,7 +129,12 @@ function makeCodeOutput() {
 `
 }
 
-const store = createCcrStore({ persist: false })
+// Isolated store: the live plugin persists real entries to the default path,
+// so verify must use its own throwaway store file.
+const store = createCcrStore({
+  persist: false,
+  storePath: join(tmpdir(), `dsh-headroom-verify-${process.pid}.json`)
+})
 await store.init()
 
 const samples = [
@@ -112,7 +142,8 @@ const samples = [
   { name: 'search-270', text: makeSearchOutput(), kind: 'search', mustChange: true, facts: ['src/api/server.ts', 'omitted'] },
   { name: 'log-180', text: makeLogOutput(), kind: 'log', mustChange: true, facts: ['repeated', 'ERROR compilation failed', 'WARN'] },
   { name: 'tabular-201', text: makeTabularOutput(), kind: 'tabular', mustChange: true, facts: ['id,module,level,message,created_at', 'omitted'] },
-  { name: 'prose-400', text: makeProseOutput(), kind: 'text', mustChange: true, facts: ['headroom_retrieve'], omittedFact: 'NEEDLE-42' },
+  { name: 'prose-400', text: makeProseOutput(), kind: 'text', mustChange: true, facts: ['headroom_retrieve'], omittedFact: 'NEEDLE-42', limits: { textStrategy: 'head-tail' } },
+  { name: 'prose-kompress', text: makeKompressProseOutput(), kind: 'text', mustChange: true, facts: ['headroom_retrieve', 'HTTP', '500', '0x1f4d2a8b', '/var/log/app.log', 'IndexError'], omittedFact: 'boilerplatephrase' },
   { name: 'code-js', text: makeCodeOutput(), kind: 'code', mustChange: false, facts: ['function reducer', 'switch'] },
   { name: 'short', text: 'just a small result', kind: 'text', mustChange: false, facts: ['just a small result'] }
 ]
@@ -123,11 +154,12 @@ console.log('')
 console.log('sample             kind      before   after    saved%   tokens_before tokens_after strategy')
 
 for (const sample of samples) {
+  const sampleLimits = sample.limits ? resolveLimits({ ...limits, ...sample.limits }) : limits
   const detected = detectContentType(sample.text)
   assert.equal(detected, sample.kind, `${sample.name}: expected kind ${sample.kind}, got ${detected}`)
 
   const outcome = compressTextBlock(sample.text, {
-    limits,
+    limits: sampleLimits,
     retrievalId: `hr:${sample.name}`,
     withMarker: true
   })
@@ -136,6 +168,12 @@ for (const sample of samples) {
     assert.equal(outcome.changed, true, `${sample.name}: expected compression to change the text`)
     assert.ok(outcome.compressedChars < outcome.originalChars, `${sample.name}: expected a size reduction`)
     assert.match(outcome.text, /headroom_retrieve\(id="hr:/, `${sample.name}: expected a CCR marker`)
+    // Regression guard: a lossy text compression must never leave the model
+    // with a block whose only content is the marker itself.
+    if (sample.kind === 'text') {
+      const contentOnly = outcome.text.replace(/\[headroom:[^\]]*\]/g, '').trim()
+      assert.ok(contentOnly.length > 0, `${sample.name}: compressed text must keep real content`)
+    }
   } else {
     assert.equal(outcome.changed, false, `${sample.name}: expected no compression`)
     assert.equal(outcome.text, sample.text, `${sample.name}: expected unchanged text`)

@@ -1,7 +1,7 @@
 {
   "name": "dsh-headroom",
   "description": "Headroom-inspired automatic context compression plugin for DeepSeek Harness (dsh): compresses tool outputs before they reach the model and keeps every lossy compression reversible via CCR retrieval tools.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": false,
   "repository": {
     "type": "git",
@@ -20,6 +20,7 @@
   "exports": {
     ".": "./lib/index.js",
     "./compress": "./lib/compress.js",
+    "./kompress": "./lib/kompress.js",
     "./ccr": "./lib/ccr.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
@@ -39,7 +40,7 @@
     }
   },
   "scripts": {
-    "check": "node --check lib/index.js && node --check lib/compress.js && node --check lib/ccr.js",
+    "check": "node --check lib/index.js && node --check lib/compress.js && node --check lib/kompress.js && node --check lib/ccr.js",
     "test": "node tests/compress.test.js",
     "verify": "node scripts/verify-compress.mjs",
     "verify:apply": "node scripts/verify-apply.mjs"

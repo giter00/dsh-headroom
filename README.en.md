@@ -32,8 +32,20 @@ byte-for-byte.
   | grep / ripgrep output | Fold by file: `file (N matches)` + `line[:col]: rest` |
   | build / test / log output | Consecutive-repeat folding + `error/fail/exception/assert` context preserved |
   | CSV / TSV / markdown tables | Keep header + first/last rows, offload the middle |
-  | Long prose | Head/tail truncation + CCR marker |
+  | Long prose | **Kompress-style ML compression** (default): word-level scoring + must-keep protection + reversible CCR; `textStrategy: 'head-tail'` switches back to truncation |
   | Code | **Not compressed** (no AST compressor in this JS port) |
+
+> **Kompress text compression** (following [Headroom](https://github.com/headroomlabs-ai/headroom)'s
+> [Kompress-v2-base](https://huggingface.co/chopratejas/kompress-v2-base) ML model):
+> the text is split into words, each word is scored
+> (`score = keepProb × (0.5 + 0.5 × spanScore)`, mirroring the model's token-classifier +
+> span-CNN dual heads), words with `score > 0.5` are kept (or the top-k by `targetRatio`),
+> and semantically fragile words — numbers, hex, ALLCAPS identifiers, paths, file extensions,
+> CLI flags, CamelCase — are **always kept**. The default scorer is a deterministic pure-JS
+> heuristic; the real Kompress-v2-base model can be plugged in at the library
+> level via `compressKompressText(text, { scorer })` /
+> `createKompressCompressor({ scorer })` while the pipeline stays identical
+> (the plugin config does not expose `scorer` yet).
 
 - **Reversible compression (CCR)**: `headroom_retrieve` / `headroom_compress` /
   `headroom_stats` mirror Headroom's MCP surface.
@@ -56,9 +68,10 @@ flowchart LR
   D --> F[search] --> F1[search fold]
   D --> G[log] --> G1[repeat fold + error keep]
   D --> H[tabular] --> H1[head/tail keep]
-  D --> I[text] --> I1[head/tail + CCR]
+  D --> I[text] --> I1[Kompress word scoring + must-keep]
+  I1 -. no win .-> I2[fallback head/tail]
   D --> J[code] --> Z
-  E1 & F1 & G1 & H1 & I1 --> K{compressed + marker smaller?}
+  E1 & F1 & G1 & H1 & I1 & I2 --> K{compressed + marker smaller?}
   K -- no --> Z
   K -- yes --> L[write CCR store]
   L --> M[replace decision.content]
@@ -66,6 +79,8 @@ flowchart LR
 ```
 
 - `lib/compress.js` — pure-function compressors, no `node:*` imports.
+- `lib/kompress.js` — the Kompress-style prose pipeline (word scoring + must-keep
+  protection), ported from Headroom's Kompress-v2-base ML approach; pluggable scorer.
 - `lib/ccr.js` — in-memory CCR store with debounced persistence.
 - `lib/index.js` — dsh plugin entrypoint.
 
@@ -82,11 +97,14 @@ flowchart LR
 | log, 180 lines | log | 3 909 | 1 125 | **71.2%** |
 | CSV, 201 lines | tabular | 19 814 | 3 029 | **84.7%** |
 | prose, 400 segments | text | 29 506 | 546 | **98.1%** |
+| Kompress prose (facts + boilerplate) | text | 16 439 | 2 029 | **87.7%** |
 | code | code | 493 | 493 | 0% (protected) |
 | short text | text | 19 | 19 | 0% (below threshold) |
 
 > Token estimates in the script use `chars / 4`; real token counts depend on the model
 > tokenizer. Every lossy compression stores the original, so nothing is unrecoverable.
+> The Kompress sample keeps every fragile fact (`HTTP`/`500`/hex/path/`IndexError`)
+> while deleting the repeated `boilerplatephrase` (recoverable via CCR).
 
 ### Default configuration
 
@@ -110,6 +128,9 @@ With defaults (`minChars=600, maxRows=80, maxCellChars=200, maxTextChars=2400`):
 3. For every lossy compression, `headroom_retrieve` returns the exact original.
 4. A `NEEDLE-42` fact hidden in the omitted middle of prose is absent from the
    compressed view but fully recoverable via CCR.
+5. After Kompress compression, fragile facts (`HTTP`, `500`, `0x1f4d2a8b`,
+   `/var/log/app.log`, `IndexError`) stay visible while the repeated
+   `boilerplatephrase` is deleted and recoverable via CCR.
 
 `scripts/verify-apply.mjs` (requires `@deepseek-ai/dsh-tools` resolvable) verifies the
 real `apply()` surface: the post-execute listener is installed, a large grep output is
@@ -198,6 +219,15 @@ Override via `cordis.patch.yml`:
     maxTabularLines: 80
     excludeTools: []
     includeErrors: false
+    textStrategy: auto        # auto | kompress | head-tail
+    kompress:
+      enabled: true
+      minWords: 10
+      chunkWords: 350
+      scoreThreshold: 0.5
+      targetRatio: null       # null=threshold decision; 0.3=force keep top 30%
+      mustKeep: true
+      maxWordChars: 64
     ccr:
       enabled: true
       persist: true
@@ -213,10 +243,18 @@ Override via `cordis.patch.yml`:
 | `maxCellChars` | `200` | Cell truncation length for JSON/search |
 | `maxSearchMatchesPerFile` | `60` | Search hits kept per file |
 | `maxLogLines` | `80` | Log head/tail budget |
-| `maxTextChars` | `2400` | Prose head/tail budget |
+| `maxTextChars` | `2400` | Prose head/tail budget (head-tail strategy) |
 | `maxTabularLines` | `80` | Tabular head/tail budget |
 | `excludeTools` | `[]` | `*` wildcard patterns; matched tools are never compressed |
 | `includeErrors` | `false` | Compress error tool outputs too |
+| `textStrategy` | `'auto'` | Prose strategy: `auto`=Kompress first, head/tail fallback; `kompress`=Kompress only; `head-tail`=truncation only |
+| `kompress.enabled` | `true` | `false` routes prose to head/tail |
+| `kompress.minWords` | `10` | Skip texts with fewer words (matches Headroom) |
+| `kompress.chunkWords` | `350` | Words per inference chunk (coupled to the model, like Headroom) |
+| `kompress.scoreThreshold` | `0.5` | Keep when `score > threshold` (matches Headroom's default) |
+| `kompress.targetRatio` | `null` | Force keep-ratio via top-k scoring; `null` = threshold decision |
+| `kompress.mustKeep` | `true` | Always keep fragile words (numbers/hex/ALLCAPS/paths/extensions/flags/CamelCase) |
+| `kompress.maxWordChars` | `64` | Longer words (e.g. unbroken CJK runs) are subdivided for scoring |
 | `ccr.enabled` | `true` | Disable to turn off lossy compression entirely |
 | `ccr.persist` | `true` | Persist the CCR store to disk |
 | `ccr.ttlMs` | `86400000` | Original-content retention |
@@ -245,6 +283,23 @@ node scripts/verify-compress.mjs
 node scripts/verify-apply.mjs   # requires @deepseek-ai/dsh-tools
 ```
 
+## Known limitations
+
+- **The default scorer is a heuristic simulation, not real model inference**:
+  `lib/kompress.js` faithfully ports Headroom's Kompress-v2-base pipeline structure
+  and scoring formula, but the default scores come from a deterministic pure-JS
+  heuristic. To get real model semantics, plug an ONNX/PyTorch scorer at the
+  library level.
+- **Kompress output is a fragment of kept words**: the default threshold deletes
+  many ordinary words aggressively, so readability is limited — it is designed
+  for model consumption plus CCR retrieval of the exact original when needed.
+- **Conservative no-compression cases**: texts made entirely of must-keep tokens,
+  or purely repeated CJK text, fall back to head/tail or pass through unchanged
+  so content is never wiped to zero.
+- **Template text is not de-duplicated**: repeated numbers/identifiers are each
+  preserved by must-keep semantics, so templated output may keep many repeated
+  fact tokens and compress less than ordinary prose.
+
 ## Differences from Headroom
 
 | Dimension | Headroom | dsh-headroom |
@@ -252,9 +307,9 @@ node scripts/verify-apply.mjs   # requires @deepseek-ai/dsh-tools
 | Integration | proxy / wrap / MCP / SDK | native dsh plugin on `tools/post-execute` |
 | JSON | SmartCrusher (Rust core) | JS pivot (`_keys` / `_rows` / `_common`) |
 | Code | AST CodeCompressor | skipped by default |
-| Text | Kompress-v2-base ML model | head/tail truncation + CCR |
+| Text | Kompress-v2-base ML model (ONNX/PyTorch) | **same Kompress pipeline** (word scoring + must-keep + threshold/top-k); pure-JS heuristic scorer by default, the real model can be plugged in via `createKompressCompressor({ scorer })` (not exposed in plugin config yet) |
 | Reversibility | CCR | local CCR store + `headroom_retrieve` |
-| Native deps | some extras | none |
+| Native deps | some extras (onnxruntime/torch) | none with the default heuristic; only when plugging in the real model |
 
 ## License
 
