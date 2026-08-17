@@ -33,7 +33,8 @@ byte-for-byte.
   | build / test / log output | Consecutive-repeat folding + `error/fail/exception/assert` context preserved |
   | CSV / TSV / markdown tables | Keep header + first/last rows, offload the middle |
   | Long prose | **Kompress-style ML compression** (default): word-level scoring + must-keep protection + reversible CCR; `textStrategy: 'head-tail'` switches back to truncation |
-  | Code | **Not compressed** (no AST compressor in this JS port) |
+  | Code | **Not compressed** (no AST compressor in this JS port; line-numbered `read`/`str_replace_editor` output is detected as code first) |
+  | File tools | **Not compressed** by default (`read`/`str_replace_editor`/`edit`/`write` and paths matching `*.js/*.ts/*.json/*.yml`) |
 
 > **Kompress text compression** (following [Headroom](https://github.com/headroomlabs-ai/headroom)'s
 > [Kompress-v2-base](https://huggingface.co/chopratejas/kompress-v2-base) ML model):
@@ -218,6 +219,9 @@ Override via `cordis.patch.yml`:
     maxTextChars: 2400
     maxTabularLines: 80
     excludeTools: []
+    noFoldForTools: ['read', 'str_replace_editor', 'edit', 'write']
+    noFoldForPatterns: ['*.js', '*.ts', '*.json', '*.yml', '*.yaml']
+    markerStyle: full          # full | compact
     includeErrors: false
     textStrategy: auto        # auto | kompress | head-tail
     kompress:
@@ -240,12 +244,15 @@ Override via `cordis.patch.yml`:
 | `enabled` | `true` | Master switch |
 | `minChars` | `600` | Minimum text-block length before compression is considered |
 | `maxRows` | `80` | Maximum JSON pivot rows kept |
-| `maxCellChars` | `200` | Cell truncation length for JSON/search |
+| `maxCellChars` | `200` | Cell truncation length for JSON (search match lines are kept in full) |
 | `maxSearchMatchesPerFile` | `60` | Search hits kept per file |
 | `maxLogLines` | `80` | Log head/tail budget |
 | `maxTextChars` | `2400` | Prose head/tail budget (head-tail strategy) |
 | `maxTabularLines` | `80` | Tabular head/tail budget |
 | `excludeTools` | `[]` | `*` wildcard patterns; matched tools are never compressed |
+| `noFoldForTools` | `['read','str_replace_editor','edit','write']` | File-content tools are never compressed, keeping read→edit snapshots consistent |
+| `noFoldForPatterns` | `['*.js','*.ts','*.json','*.yml','*.yaml']` | Matched file paths/tool names are never compressed; protects source/config files |
+| `markerStyle` | `'full'` | `full` keeps strategy/savings plus the `headroom_retrieve` hint; `compact` emits only `id="hr:…"` to reduce marker noise |
 | `includeErrors` | `false` | Compress error tool outputs too |
 | `textStrategy` | `'auto'` | Prose strategy: `auto`=Kompress first, head/tail fallback; `kompress`=Kompress only; `head-tail`=truncation only |
 | `kompress.enabled` | `true` | `false` routes prose to head/tail |
@@ -271,7 +278,7 @@ Override via `cordis.patch.yml`:
 Marker format:
 
 ```text
-[headroom: search-fold 12345→987 chars; retrieve full original with headroom_retrieve(id="hr:0123456789abcdef")]
+[headroom: search-fold 12345→987 chars; headroom_retrieve(id="hr:0123456789abcdef")]
 ```
 
 ## Development

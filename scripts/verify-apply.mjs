@@ -63,6 +63,16 @@ const fsResult = { isError: false, content: [{ type: 'text', text: 'long '.repea
 const fsDecision = await post({ name: 'fs-read-file', callId: 'call-fs', agent: { id: 'session-1' } }, fsResult, accept)
 assert.equal(materializedContent(fsDecision, fsResult)[0].text, fsResult.content[0].text, 'excluded tools must not be compressed')
 
+// 2b) File-content tools are protected by default so read→edit stays consistent.
+const readResult = { isError: false, content: [{ type: 'text', text: 'long '.repeat(300) }], additionalContexts: [] }
+const readDecision = await post({ name: 'read', callId: 'call-read', agent: { id: 'session-1' } }, readResult, accept)
+assert.equal(materializedContent(readDecision, readResult)[0].text, readResult.content[0].text, 'read tool must not be compressed by default')
+
+// 2c) Source/config path globs protect generic tools too (e.g. pwsh reading a .ts file).
+const pathResult = { isError: false, content: [{ type: 'text', text: 'long '.repeat(300) }], additionalContexts: [] }
+const pathDecision = await post({ name: 'pwsh', args: { command: 'Get-Content src/foo.ts' }, callId: 'call-path', agent: { id: 'session-1' } }, pathResult, accept)
+assert.equal(materializedContent(pathDecision, pathResult)[0].text, pathResult.content[0].text, 'source path must not be compressed by default')
+
 // 3) dsh-headroom's own tools must be untouched.
 const ownResult = { isError: false, content: [{ type: 'text', text: 'long '.repeat(300) }], additionalContexts: [] }
 const ownDecision = await post({ name: 'headroom_stats', callId: 'call-own', agent: { id: 'session-1' } }, ownResult, accept)

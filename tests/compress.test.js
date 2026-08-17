@@ -12,6 +12,7 @@ import {
 } from '../lib/compress.js'
 import {
   KOMPRESS_MUST_KEEP_RE,
+  KOMPRESS_SYNTAX_RE,
   scoreWordsHeuristic,
   splitKompressWords
 } from '../lib/kompress.js'
@@ -32,6 +33,18 @@ test('detectContentType routes JSON, search, log, code and text', () => {
   assert.equal(detectContentType('just some plain prose here'), 'text')
 })
 
+test('detectContentType recognizes line-numbered read/view output as code', () => {
+  const readView = [
+    '1: /**',
+    '2:  * comment',
+    '3:  */',
+    '4: export function render(state) {',
+    '5:   return state.items.map((item) => item.label).join(\', \')',
+    '6: }'
+  ].join('\n')
+  assert.equal(detectContentType(readView), 'code')
+})
+
 test('JSON object rows are pivoted and compressed', () => {
   const rows = Array.from({ length: 30 }, (_, index) => ({
     file: `src/file-${index}.ts`,
@@ -46,6 +59,18 @@ test('JSON object rows are pivoted and compressed', () => {
   assert.match(outcome.text, /_keys/)
 })
 
+test('compact marker style emits only the retrieval id', () => {
+  const original = 'long '.repeat(200)
+  const outcome = compressTextBlock(original, {
+    limits: resolveLimits({ ...limits, markerStyle: 'compact' }),
+    retrievalId: 'hr:compact',
+    withMarker: true
+  })
+  assert.equal(outcome.changed, true)
+  assert.ok(outcome.text.includes('id="hr:compact"'))
+  assert.equal(outcome.text.includes('headroom_retrieve'), false)
+})
+
 test('search results are folded by file', () => {
   const original = Array.from({ length: 40 }, (_, index) => `src/file.ts:${index + 1}: message number ${index}`).join('\n')
   const outcome = compressTextBlock(original, { limits, retrievalId: 'hr:search', withMarker: true })
@@ -53,6 +78,17 @@ test('search results are folded by file', () => {
   assert.equal(outcome.changed, true)
   assert.ok(outcome.text.includes('src/file.ts (40 matches)'))
   assert.ok(outcome.text.includes('omitted'))
+})
+
+test('search-fold preserves full matched lines', () => {
+  const longMessage = 'x'.repeat(200)
+  const original = Array.from({ length: 40 }, (_, index) => (
+    `src/file.ts:${index + 1}: ${index === 0 ? longMessage : `message number ${index}`}`
+  )).join('\n')
+  const outcome = compressTextBlock(original, { limits, retrievalId: 'hr:search-full', withMarker: true })
+  assert.equal(outcome.strategy, 'search-fold')
+  assert.equal(outcome.changed, true)
+  assert.ok(outcome.text.includes(longMessage), 'full matched line must not be truncated')
 })
 
 test('log output collapses repeated lines and keeps errors', () => {
@@ -262,6 +298,23 @@ test('KOMPRESS_MUST_KEEP_RE matches fragile token classes', () => {
   }
   for (const token of ['the', 'quiet', 'running', 'compilation']) {
     assert.equal(KOMPRESS_MUST_KEEP_RE.test(token), false, `must-keep regex should NOT match ${token}`)
+  }
+})
+
+test('KOMPRESS_SYNTAX_RE matches operators and not words', () => {
+  for (const token of ['=', '=>', '===', '??', '?.', '(', ')', '{', '}', '[', ']', '+', ',', ';']) {
+    assert.equal(KOMPRESS_SYNTAX_RE.test(token), true, `syntax regex should match ${token}`)
+  }
+  assert.equal(KOMPRESS_SYNTAX_RE.test('the'), false)
+})
+
+test('Kompress keeps JS/TS syntax operators when text is misclassified as prose', () => {
+  const codeish = 'the value = config ?? process.env.APP_ID and (x) => x + 1'
+  const original = (codeish + ' ').repeat(20)
+  const compressed = compressKompressText(original, { minWords: 5 })
+  assert.ok(compressed !== null, 'Kompress should still find a word-level win')
+  for (const token of ['=', '??', '(', ')', '=>', '+']) {
+    assert.ok(compressed.includes(token), `syntax token "${token}" must survive Kompress`)
   }
 })
 

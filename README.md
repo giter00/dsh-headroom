@@ -32,7 +32,8 @@
   | 构建/测试/日志 | 连续重复行折叠 + 保留 `error/fail/exception/assert` 上下文 |
   | CSV/TSV/markdown 表格 | 保留表头与首尾行，中间行 offload |
   | 长文本 | **Kompress 风格 ML 压缩**（默认）：逐词打分 + must-keep 保护 + CCR 可逆取回；`textStrategy: 'head-tail'` 可切回首尾截断 |
-  | 代码 | **默认不压缩**（JS 端口不做 AST 压缩，避免破坏可补丁字节） |
+  | 代码 | **默认不压缩**（JS 端口不做 AST 压缩，避免破坏可补丁字节；`read`/`str_replace_editor` 的行号前缀会先剥离再识别） |
+  | 文件工具 | **默认不压缩**（`read`/`str_replace_editor`/`edit`/`write` 及其匹配 `*.js/*.ts/*.json/*.yml` 的路径） |
 
 > **Kompress 文本压缩**（参考 [Headroom](https://github.com/headroomlabs-ai/headroom) 的
 > [Kompress-v2-base](https://huggingface.co/chopratejas/kompress-v2-base) ML 模型）：
@@ -218,6 +219,9 @@ dsh plugin --profile web remove dsh-headroom
     maxTextChars: 2400
     maxTabularLines: 80
     excludeTools: []
+    noFoldForTools: ['read', 'str_replace_editor', 'edit', 'write']
+    noFoldForPatterns: ['*.js', '*.ts', '*.json', '*.yml', '*.yaml']
+    markerStyle: full          # full | compact
     includeErrors: false
     textStrategy: auto        # auto | kompress | head-tail
     kompress:
@@ -240,12 +244,15 @@ dsh plugin --profile web remove dsh-headroom
 | `enabled` | `true` | 总开关 |
 | `minChars` | `600` | 文本块至少多少字符才考虑压缩 |
 | `maxRows` | `80` | JSON 透视保留的最大行数 |
-| `maxCellChars` | `200` | JSON/search 单元格字符串截断长度 |
+| `maxCellChars` | `200` | JSON 单元格字符串截断长度（search 匹配行保持全文） |
 | `maxSearchMatchesPerFile` | `60` | 每个文件保留的搜索命中数 |
 | `maxLogLines` | `80` | 日志保留的首尾行数 |
 | `maxTextChars` | `2400` | 长文本首尾保留字符数（head-tail 策略） |
 | `maxTabularLines` | `80` | 表格保留的首尾行数 |
 | `excludeTools` | `[]` | `*` 通配符；命中的工具不压缩 |
+| `noFoldForTools` | `['read','str_replace_editor','edit','write']` | 文件内容类工具永不压缩，避免 read→edit 快照不一致 |
+| `noFoldForPatterns` | `['*.js','*.ts','*.json','*.yml','*.yaml']` | 匹配到的文件路径/工具名不压缩；保护源码与配置文件 |
+| `markerStyle` | `'full'` | `full`=保留策略/节省量与 `headroom_retrieve` 提示；`compact`=只保留 `id="hr:…"`，减少标记噪音 |
 | `includeErrors` | `false` | 是否压缩工具错误输出 |
 | `textStrategy` | `'auto'` | 长文本策略：`auto`=Kompress 优先、无收益回退 head-tail；`kompress`=仅 Kompress；`head-tail`=仅首尾截断 |
 | `kompress.enabled` | `true` | `false` 时文本走 head-tail |
@@ -271,7 +278,7 @@ dsh plugin --profile web remove dsh-headroom
 压缩后的 tool result 会携带如下 marker：
 
 ```text
-[headroom: search-fold 12345→987 chars; retrieve full original with headroom_retrieve(id="hr:0123456789abcdef")]
+[headroom: search-fold 12345→987 chars; headroom_retrieve(id="hr:0123456789abcdef")]
 ```
 
 ## 项目结构
