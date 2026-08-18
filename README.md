@@ -143,7 +143,7 @@ flowchart LR
 | 项目 | 要求 |
 |------|------|
 | Node.js | `>= 22.0.0`（推荐 Node 22 LTS 或更高） |
-| DeepSeek Harness | `>= 0.0.1-rc.5 < 0.1.0` |
+| DeepSeek Harness | `>= 0.0.1-rc.5 < 0.2.0-0`（含 0.1.x 预发布） |
 | 包管理器 | 推荐 `pnpm >= 11`；`npm` / `yarn` 也可用于本地开发 |
 | 操作系统 | Windows / macOS / Linux（纯 JS，无原生编译） |
 

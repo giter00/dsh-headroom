@@ -4,7 +4,7 @@
   "main": "./lib/index.js",
   "description": "Headroom-inspired automatic context compression: compresses tool outputs before they reach the model and registers headroom_retrieve / headroom_compress / headroom_stats tools for reversible retrieval.",
   "engines": {
-    "dsh": ">=0.0.1-rc.5 <0.1.0"
+    "dsh": ">=0.0.1-rc.5 <0.1.0 || >=0.1.0-rc.1 <0.2.0-0"
   },
   "contributes": {
     "tools": [],

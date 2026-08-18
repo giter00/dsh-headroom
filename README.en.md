@@ -144,7 +144,7 @@ compressed and retrievable, and excluded/own/code/error/short outputs are untouc
 | Item | Requirement |
 |------|-------------|
 | Node.js | `>= 22.0.0` |
-| DeepSeek Harness | `>= 0.0.1-rc.5 < 0.1.0` |
+| DeepSeek Harness | `>= 0.0.1-rc.5 < 0.2.0-0` (includes 0.1.x prereleases) |
 | Package manager | `pnpm >= 11` recommended |
 | OS | Windows / macOS / Linux |
 
