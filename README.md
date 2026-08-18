@@ -300,6 +300,7 @@ dsh-headroom/
 ├── package.json
 ├── README.md
 ├── README.en.md
+├── CONTRIBUTING.md
 ├── LICENSE
 └── NOTICE
 ```
