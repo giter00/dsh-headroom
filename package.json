@@ -32,7 +32,8 @@
     "cordis.patch.yml",
     "README.md",
     "README.en.md",
-    "LICENSE"
+    "LICENSE",
+    "NOTICE"
   ],
   "dsh": {
     "bundle": {
@@ -62,5 +63,5 @@
     "@deepseek-ai/dsh-tools": ">=0.0.1-rc.5"
   },
   "devDependencies": {},
-  "license": "MIT"
+  "license": "Apache-2.0"
 }

@@ -300,7 +300,8 @@ dsh-headroom/
 ├── package.json
 ├── README.md
 ├── README.en.md
-└── LICENSE
+├── LICENSE
+└── NOTICE
 ```
 
 ## 开发与验证
@@ -345,7 +346,11 @@ node scripts/verify-apply.mjs
 
 ## License
 
-[MIT](./LICENSE)
+[Apache-2.0](./LICENSE)
+
+本项目是从 [Headroom](https://github.com/headroomlabs-ai/headroom)（Apache-2.0）
+改造而来的衍生作品，因此沿用 Apache License 2.0 发布，以保持许可证一致性并满足
+上游合规要求。版权与上游归属见 [NOTICE](./NOTICE)。
 
 ## 致谢
 

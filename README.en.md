@@ -320,7 +320,13 @@ node scripts/verify-apply.mjs   # requires @deepseek-ai/dsh-tools
 
 ## License
 
-[MIT](./LICENSE)
+[Apache-2.0](./LICENSE)
+
+This project is a derivative work of
+[Headroom](https://github.com/headroomlabs-ai/headroom) (Apache-2.0), so it is
+released under the Apache License 2.0 as well, keeping license compatibility and
+satisfying upstream compliance requirements. See [NOTICE](./NOTICE) for
+copyright and upstream attribution.
 
 ## Acknowledgements
 
