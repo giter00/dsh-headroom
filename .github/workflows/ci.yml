@@ -21,7 +21,7 @@ jobs:
       - name: Syntax-check plugin entry
         run: node --check lib/index.js
       - name: Syntax-check compressors
-        run: node --check lib/compress.js
+        run: node --check lib/compress.js && node --check lib/kompress.js
       - name: Syntax-check CCR store
         run: node --check lib/ccr.js
       - name: Unit tests
